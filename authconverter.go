@@ -9,12 +9,13 @@ import (
 )
 
 type TokenSource string
-type authType string
+type AuthType string
 
 const (
 	password  TokenSource = "password"
 	username  TokenSource = "username"
 	unchanged TokenSource = "full"
+	decoded   TokenSource = "decoded"
 	combined  TokenSource = "combined"
 )
 
@@ -23,21 +24,23 @@ const (
 )
 
 const (
-	basic  authType = "Basic"
-	bearer authType = "Bearer"
+	basic  AuthType = "Basic"
+	bearer AuthType = "Bearer"
+	digest AuthType = "Digest"
 )
 
 // Config structure
 type Config struct {
 	tokenSource TokenSource `yaml:"tokenSource"`
 	encodeToken bool        `yaml:"encodeToken"`
+	sourceType  AuthType    `yaml:"sourceType"`
+	targetType  AuthType    `yaml:"targetType"`
 }
 
 // Main struct
 type AuthConverter struct {
-	next        http.Handler
-	tokenSource TokenSource
-	encodeToken bool
+	next   http.Handler
+	config *Config
 }
 
 // Gets token from passed header
@@ -46,25 +49,33 @@ func (e *AuthConverter) getToken(header string) (string, error) {
 	if len(splitHeader) != 2 {
 		return "", errors.New("invalid authorization header contents")
 	}
-	if splitHeader[0] != string(basic) {
+	if splitHeader[0] != string(e.config.sourceType) {
 		return "", errors.New("invalid authorization type")
 	}
-	basicTokenBase64 := splitHeader[1]
+	sourceTokenBase64 := splitHeader[1]
 
-	if e.tokenSource == unchanged {
-		return basicTokenBase64, nil
+	if e.config.tokenSource == unchanged {
+		return sourceTokenBase64, nil
 	}
 
-	basicTokenDecoded, err := base64.StdEncoding.DecodeString(basicTokenBase64)
+	sourceTokenDecoded, err := base64.StdEncoding.DecodeString(sourceTokenBase64)
 	if err != nil {
 		return "", errors.New("Base64 decoding failed")
 	}
-	basicTokenParts := strings.SplitN(string(basicTokenDecoded), ":", 2)
+
+	if e.config.tokenSource == decoded {
+		return string(sourceTokenDecoded), nil
+	}
+
+	if e.config.sourceType != basic {
+		return "", errors.New("partial ")
+	}
+	basicTokenParts := strings.SplitN(string(sourceTokenDecoded), ":", 2)
 	if len(basicTokenParts) != 2 {
 		return "", errors.New("invalid value in authorization header")
 	}
 
-	switch e.tokenSource {
+	switch e.config.tokenSource {
 	case username:
 		return basicTokenParts[0], nil
 	case password:
@@ -80,10 +91,10 @@ func (e *AuthConverter) getToken(header string) (string, error) {
 func (e *AuthConverter) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	token, err := e.getToken(req.Header.Get(HeaderName))
 	if err == nil {
-		if e.encodeToken {
+		if e.config.encodeToken {
 			token = base64.StdEncoding.EncodeToString([]byte(token))
 		}
-		authorization := "Bearer " + token
+		authorization := string(e.config.targetType) + " " + token
 		req.Header.Set(HeaderName, authorization)
 	}
 
@@ -94,18 +105,19 @@ func CreateConfig() *Config {
 	return &Config{
 		tokenSource: combined,
 		encodeToken: false,
+		sourceType:  basic,
+		targetType:  bearer,
 	}
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	validConfig := map[TokenSource]bool{username: true, password: true, unchanged: true, combined: true}
+	validConfig := map[TokenSource]bool{username: true, password: true, unchanged: true, combined: true, decoded: true}
 	if !validConfig[config.tokenSource] {
 		return nil, errors.New("invalid token source")
 	}
 
 	return &AuthConverter{
-		next:        next,
-		tokenSource: config.tokenSource,
-		encodeToken: config.encodeToken,
+		next:   next,
+		config: config,
 	}, nil
 }

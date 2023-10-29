@@ -3,8 +3,10 @@ type: middleware
 
 import: github.com/Lightirius/traefik-auth-converter
 
-summary: Converts username/pasword from Basic auth authorization header to Bearer authorization header
+summary: Converts between Basic, Beared and Digest authorization header with optional base64 encoding\decoding
 
 testData:
   tokenSource: "password"
   encodeToken: true
+  sourceType: "Basic"
+  targetType: "Bearer"

@@ -17,19 +17,25 @@ func Test_ServeHTTP(t *testing.T) {
 	}{
 		{
 			"Header should not be changed when token is not found",
-			Config{tokenSource: password, encodeToken: false},
+			Config{tokenSource: combined, encodeToken: false, sourceType: basic, targetType: bearer},
 			"Bearer YTtkbmdhb3VpcmduYXdvZ2lu",
 			"Bearer YTtkbmdhb3VpcmduYXdvZ2lu",
 		},
 		{
-			"Header should be set for correct input headers",
-			Config{tokenSource: combined, encodeToken: false},
+			"Header should be set for correct target type",
+			Config{tokenSource: combined, encodeToken: false, sourceType: basic, targetType: bearer},
 			"Basic ZFhObGNsOXNiMmRwYm5WOnpaWEpmY0dGemMzZHZjbVE9",
 			"Bearer dXNlcl9sb2dpbnVzZXJfcGFzc3dvcmQ=",
 		},
 		{
+			"Header should be set for correct target type",
+			Config{tokenSource: combined, encodeToken: false, sourceType: basic, targetType: digest},
+			"Basic ZFhObGNsOXNiMmRwYm5WOnpaWEpmY0dGemMzZHZjbVE9",
+			"Digest dXNlcl9sb2dpbnVzZXJfcGFzc3dvcmQ=",
+		},
+		{
 			"Token should be base64 encoded if requested",
-			Config{tokenSource: combined, encodeToken: true},
+			Config{tokenSource: combined, encodeToken: true, sourceType: basic, targetType: bearer},
 			"Basic dXNlcl9sb2dpbjp1c2VyX3Bhc3N3b3Jk",
 			"Bearer dXNlcl9sb2dpbnVzZXJfcGFzc3dvcmQ=",
 		},
@@ -57,53 +63,52 @@ func Test_ServeHTTP(t *testing.T) {
 func Test_New(t *testing.T) {
 
 	var tests = []struct {
-		name                string
-		inputConfig         Config
-		expectedTokenSource TokenSource
-		expectedEncodeToken bool
-		expectedError       bool
+		name           string
+		inputConfig    Config
+		expectedConfig Config
+		expectedError  bool
 	}{
 		{
 			"Values from config should be set to object",
-			Config{tokenSource: password, encodeToken: true},
-			password,
-			true,
+			Config{tokenSource: password, encodeToken: true, sourceType: bearer, targetType: digest},
+			Config{tokenSource: password, encodeToken: true, sourceType: bearer, targetType: digest},
 			false,
 		},
 		{
-			"Invalid config should return error",
+			"Invalid source should return error",
 			Config{tokenSource: "not_a_source", encodeToken: true},
-			"",
-			false,
+			Config{tokenSource: "not_a_source", encodeToken: true},
 			true,
 		},
 		{
 			"Username type is allowed",
 			Config{tokenSource: username, encodeToken: false},
-			username,
+			Config{tokenSource: username, encodeToken: false},
 			false,
-			true,
 		},
 		{
 			"Password type is allowed",
 			Config{tokenSource: password, encodeToken: false},
-			password,
+			Config{tokenSource: password, encodeToken: false},
 			false,
-			true,
 		},
 		{
 			"Combined type is allowed",
 			Config{tokenSource: combined, encodeToken: false},
-			combined,
+			Config{tokenSource: combined, encodeToken: false},
 			false,
-			true,
 		},
 		{
 			"Unchanged type is allowed",
 			Config{tokenSource: unchanged, encodeToken: false},
-			unchanged,
+			Config{tokenSource: unchanged, encodeToken: false},
 			false,
-			true,
+		},
+		{
+			"Decoded type is allowed",
+			Config{tokenSource: decoded, encodeToken: false},
+			Config{tokenSource: decoded, encodeToken: false},
+			false,
 		},
 	}
 
@@ -112,23 +117,31 @@ func Test_New(t *testing.T) {
 			actual, err := New(context.TODO(), nil, &testCase.inputConfig, "")
 
 			if err != nil {
-				if !testCase.expectedError {
+				if testCase.expectedError {
+					return //Expected error - got one
+				} else {
+					//Not expected error - got one
 					t.Errorf(
-						"Expected: '%s' '%t', got error: '%s'",
-						testCase.expectedTokenSource,
-						testCase.expectedEncodeToken,
+						"Expected: '%vf', got error: '%s'",
+						testCase.expectedConfig,
 						err,
 					)
 				}
-				return
-			}
-			actualConverter := actual.(*AuthConverter)
+			} else {
+				if testCase.expectedError {
+					//Expected error - but there is no error
+					t.Errorf(
+						"Expected error, got: '%vf'",
+						actual,
+					)
+				} else {
+					//Not expected error - got no errors
+					actualConverter := actual.(*AuthConverter)
 
-			if actualConverter.tokenSource != testCase.expectedTokenSource {
-				t.Errorf("Expected: '%s', got: '%s'", testCase.expectedTokenSource, actualConverter.tokenSource)
-			}
-			if actualConverter.encodeToken != testCase.expectedEncodeToken {
-				t.Errorf("Expected: '%t', got: '%t'", testCase.expectedEncodeToken, actualConverter.encodeToken)
+					if *actualConverter.config != testCase.expectedConfig {
+						t.Errorf("Expected: '%vf', got: '%vf'", testCase.expectedConfig, *actualConverter.config)
+					}
+				}
 			}
 		})
 	}
@@ -176,14 +189,25 @@ func Test_getToken(t *testing.T) {
 			"user_loginuser_password",
 			true,
 		},
+		{
+			"When the source is 'decoded' token should be a decoded original token",
+			"Basic YTtkbmdhb3VpcmduYXdvZ2lu",
+			decoded,
+			"a;dngaouirgnawogin",
+			true,
+		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			converter := AuthConverter{
-				next:        nil,
-				tokenSource: testCase.inputSource,
-				encodeToken: false,
+				next: nil,
+				config: &Config{
+					tokenSource: testCase.inputSource,
+					encodeToken: false,
+					sourceType:  basic,
+					targetType:  bearer,
+				},
 			}
 
 			actual, err := converter.getToken(testCase.inputHeader)
