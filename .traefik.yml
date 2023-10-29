@@ -1,7 +1,7 @@
 displayName: Authorization header conversion
 type: middleware
 
-import: github.com/lightirius/traefik-auth-converter
+import: github.com/Lightirius/traefik-auth-converter
 
 summary: Converts username/pasword from Basic auth authorization header to Bearer authorization header
 
