@@ -1,4 +1,4 @@
-package authconverter
+package traefik_auth_converter
 
 import (
 	"context"
