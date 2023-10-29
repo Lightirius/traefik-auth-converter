@@ -84,7 +84,7 @@ func (e *AuthConverter) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			token = base64.StdEncoding.EncodeToString([]byte(token))
 		}
 		authorization := "Bearer " + token
-		rw.Header().Set(HeaderName, authorization)
+		req.Header.Set(HeaderName, authorization)
 	}
 
 	e.next.ServeHTTP(rw, req)

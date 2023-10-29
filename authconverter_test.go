@@ -16,10 +16,10 @@ func Test_ServeHTTP(t *testing.T) {
 		expected    string
 	}{
 		{
-			"Header should not be set whet token is not found",
+			"Header should not be changed when token is not found",
 			Config{tokenSource: password, encodeToken: false},
 			"Bearer YTtkbmdhb3VpcmduYXdvZ2lu",
-			"",
+			"Bearer YTtkbmdhb3VpcmduYXdvZ2lu",
 		},
 		{
 			"Header should be set for correct input headers",
@@ -46,7 +46,7 @@ func Test_ServeHTTP(t *testing.T) {
 			authconverter, _ := New(ctx, next, &testCase.inputConfig, "")
 
 			authconverter.ServeHTTP(recorder, request)
-			actual := recorder.Result().Header.Get("Authorization")
+			actual := request.Header.Get("Authorization")
 			if actual != testCase.expected {
 				t.Errorf("Expected: '%s', got: '%s'", testCase.expected, actual)
 			}
